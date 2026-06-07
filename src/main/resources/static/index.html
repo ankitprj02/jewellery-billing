@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - JewelBill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+    <!-- Google Identity Services Library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="login-page">
+    <div class="card login-card">
+        <div class="card-body p-5">
+            <div class="text-center mb-4">
+                <i class="bi bi-gem login-logo"></i>
+                <h3 class="mt-2 fw-bold" id="formTitle">JewelBill</h3>
+                <p class="text-muted" id="formSubtitle">Jewellery Shop Billing & Inventory</p>
+            </div>
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                        <input type="text" class="form-control" id="username" required placeholder="Enter username">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                        <input type="password" class="form-control" id="password" required placeholder="Enter password">
+                    </div>
+                </div>
+                <div id="loginError" class="alert alert-danger d-none"></div>
+                <button type="submit" class="btn btn-gold w-100 py-2" id="loginBtn">
+                    <i class="bi bi-box-arrow-in-right me-2" id="submitIcon"></i><span id="submitText">Login</span>
+                </button>
+            </form>
+            
+            <div class="text-center my-3 text-muted separator-line">
+                <span class="px-2 small text-uppercase">or</span>
+            </div>
+            
+            <!-- Google Sign In Button Container -->
+            <div id="googleBtnContainer" class="d-flex justify-content-center mb-3"></div>
+            
+
+            
+            <hr>
+            
+            <div class="text-center mt-3">
+                <a href="#" id="toggleAuthMode" class="text-gold text-decoration-none small">Don't have an account? Create one</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        if (localStorage.getItem('token')) {
+            window.location.href = 'pages/dashboard.html';
+        }
+
+        let isLoginMode = true;
+
+        const toggleLink = document.getElementById('toggleAuthMode');
+        const formTitle = document.getElementById('formTitle');
+        const formSubtitle = document.getElementById('formSubtitle');
+        const submitBtn = document.getElementById('loginBtn');
+        const submitIcon = document.getElementById('submitIcon');
+        const submitText = document.getElementById('submitText');
+
+        const errorEl = document.getElementById('loginError');
+
+        // Toggle Auth Mode (Login vs Register)
+        toggleLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            isLoginMode = !isLoginMode;
+            errorEl.classList.add('d-none');
+            
+            if (isLoginMode) {
+                formTitle.textContent = 'JewelBill';
+                formSubtitle.textContent = 'Jewellery Shop Billing & Inventory';
+                submitText.textContent = 'Login';
+                submitIcon.className = 'bi bi-box-arrow-in-right me-2';
+                toggleLink.textContent = "Don't have an account? Create one";
+            } else {
+                formTitle.textContent = 'Create Account';
+                formSubtitle.textContent = 'Register a new admin user';
+                submitText.textContent = 'Register';
+                submitIcon.className = 'bi bi-person-plus me-2';
+                toggleLink.textContent = 'Already have an account? Log in';
+            }
+        });
+
+        // Form Submit Handler
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorEl.classList.add('d-none');
+            submitBtn.disabled = true;
+
+            const payload = {
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value
+            };
+
+            try {
+                const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
+                const res = await Api.post(endpoint, payload);
+                
+                localStorage.setItem('token', res.data.token);
+                localStorage.setItem('username', res.data.username);
+                localStorage.setItem('role', res.data.role);
+                window.location.href = 'pages/dashboard.html';
+            } catch (err) {
+                errorEl.textContent = err.message || (isLoginMode ? 'Login failed' : 'Registration failed');
+                errorEl.classList.remove('d-none');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Google Sign-In Success Callback
+        async function handleCredentialResponse(response) {
+            errorEl.classList.add('d-none');
+            try {
+                const res = await Api.post('/auth/google-login', {
+                    idToken: response.credential
+                });
+                
+                localStorage.setItem('token', res.data.token);
+                localStorage.setItem('username', res.data.username);
+                localStorage.setItem('role', res.data.role);
+                window.location.href = 'pages/dashboard.html';
+            } catch (err) {
+                errorEl.textContent = err.message || 'Google login failed';
+                errorEl.classList.remove('d-none');
+            }
+        }
+
+        // Initialize Google Sign-In button
+        window.onload = function () {
+            if (typeof google !== 'undefined') {
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleCredentialResponse
+                });
+                google.accounts.id.renderButton(
+                    document.getElementById("googleBtnContainer"),
+                    { theme: "outline", size: "large", width: 320 }
+                );
+            } else {
+                console.error("Google Identity Services script not loaded.");
+            }
+        };
+    </script>
+</body>
+</html>
