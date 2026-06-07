@@ -1,124 +1,100 @@
-# Deployment Guide
+# Unified Deployment Guide: JewelBill
 
-Deploy the Jewellery Shop Billing System with:
-- **Frontend** → Vercel
-- **Backend** → Render
-- **Database** → Railway MySQL
+This guide provides instructions for deploying the **JewelBill Jewellery Billing System** as a unified single-origin application. The frontend static files are served directly by the Spring Boot server on port `8080`, and the application connects to a cloud-hosted **Supabase PostgreSQL** database.
 
 ---
 
-## 1. Railway MySQL Database
+## 💻 System Architecture
 
-1. Create account at [railway.app](https://railway.app)
-2. Create a new project → **Add MySQL**
-3. Copy connection details from the **Variables** tab:
-   - `MYSQLHOST`, `MYSQLPORT`, `MYSQLUSER`, `MYSQLPASSWORD`, `MYSQLDATABASE`
-4. Build JDBC URL:
-   ```
-   jdbc:mysql://<HOST>:<PORT>/<DATABASE>?useSSL=true&requireSSL=true&serverTimezone=UTC
-   ```
+* **Unified Server**: Single Web Service hosting both API endpoints and the Bootstrap frontend.
+* **Database**: PostgreSQL 17 (hosted on Supabase).
+* **Identity Provider**: Google Sign-In (OAuth 2.0) and local credential database.
 
 ---
 
-## 2. Render Backend Deployment
+## 🛠️ 1. Database Setup (Supabase)
 
-1. Push code to GitHub
-2. Create account at [render.com](https://render.com)
-3. **New → Web Service** → Connect your repository
-4. Configure:
-   - **Environment:** Java
-   - **Build Command:** `./mvnw clean package -DskipTests`
-   - **Start Command:** `java -jar target/jewellery-billing-0.0.1-SNAPSHOT.jar`
-   - **Root Directory:** `/` (project root)
-
-5. Set **Environment Variables:**
-
-   | Variable | Value |
-   |----------|-------|
-   | `DATABASE_URL` | `jdbc:mysql://host:port/db?useSSL=true&serverTimezone=UTC` |
-   | `DB_USERNAME` | Railway MySQL user |
-   | `DB_PASSWORD` | Railway MySQL password |
-   | `JWT_SECRET` | Strong random string (256+ bits) |
-   | `CORS_ORIGINS` | Your Vercel frontend URL |
-   | `PORT` | `8080` (Render sets this automatically) |
-
-6. Deploy and note your backend URL: `https://your-app.onrender.com`
+1. Create a free account at [Supabase](https://supabase.com).
+2. Create a new project (e.g., `jewelbill-db`). Note the database region (e.g., Mumbai, `ap-south-1`).
+3. Navigate to **Project Settings → Database → Connection Pooler**.
+4. Set the pool mode to **Session** (highly recommended for transactional Java applications).
+5. Copy the connection string. It will look like this:
+   ```text
+   jdbc:postgresql://<POOLER_HOST>:5432/postgres?sslmode=require
+   ```
+6. Note your master database password and pooler username (default is usually `postgres.<YOUR_PROJECT_REF>`).
 
 ---
 
-## 3. Vercel Frontend Deployment
+## 🔑 2. Google OAuth 2.0 Setup
 
-1. Create account at [vercel.com](https://vercel.com)
-2. **New Project** → Import GitHub repository
-3. Set **Root Directory** to `frontend`
-4. Framework Preset: **Other** (static site)
-5. No build command needed
-6. Deploy
-
-7. Update API URL — edit `frontend/js/config.js` or set in `index.html`:
-   ```javascript
-   window.API_URL = 'https://your-app.onrender.com/api';
-   ```
-
-8. Update Render `CORS_ORIGINS` with your Vercel URL:
-   ```
-   https://your-app.vercel.app
-   ```
+To enable **Google Sign-In**:
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a new project or select an existing one.
+3. Go to **APIs & Services → OAuth consent screen**, select User Type, and fill in the app details.
+4. Go to **Credentials → Create Credentials → OAuth client ID**.
+5. Select Application Type: **Web application**.
+6. Configure the restrictions:
+   * **Authorized JavaScript origins**:
+     * `http://localhost:8080` (for local development)
+     * `https://<YOUR_RENDER_SUBDOMAIN>.onrender.com` (for production)
+7. Save and copy the generated **Client ID**.
 
 ---
 
-## 4. Local Development
+## 🚀 3. Render Web Service Deployment
 
-### Prerequisites
-- Java 21+
-- MySQL 8+
-- Maven (or use `./mvnw`)
+Since the frontend is bundled inside the Spring Boot JAR, you do not need separate Vercel or Netlify hosting. Simply deploy the backend:
 
-### Backend
-```bash
-# Create database
-mysql -u root -p -e "CREATE DATABASE jewellery_billing;"
+1. Push your consolidated project to **GitHub**.
+2. Log into [Render](https://render.com).
+3. Click **New → Web Service** and authorize access to your repository.
+4. Configure the service:
+   * **Environment/Language**: `Java`
+   * **Build Command**: `./mvnw clean package -DskipTests`
+   * **Start Command**: `java -jar target/jewellery-billing-0.0.1-SNAPSHOT.jar`
+5. Click **Advanced** and add the following **Environment Variables**:
 
-# Run backend
-./mvnw spring-boot:run
+| Environment Variable | Description / Recommended Value |
+|---|---|
+| `DATABASE_URL` | Supabase Pooler JDBC URL (e.g., `jdbc:postgresql://aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require`) |
+| `DB_USERNAME` | Supabase pooler username (e.g., `postgres.zdklwkizbzamehwgojvg`) |
+| `DB_PASSWORD` | Supabase project database password |
+| `JWT_SECRET` | A secure, random string at least 256 bits long for JWT signatures |
+| `GOOGLE_CLIENT_ID` | Your Google OAuth Web Client ID |
+
+6. Click **Create Web Service** to trigger the build. Render will auto-assign a public URL for your application (e.g., `https://jewelbill.onrender.com`).
+
+---
+
+## 🏠 4. Local Development Run
+
+To run the application locally on your computer:
+
+### Step A: Configure Local Credentials
+Create a file named `src/main/resources/application-local.properties` (this file is gitignored to keep credentials safe) and populate it with your local/remote database keys:
+```properties
+spring.datasource.url=jdbc:postgresql://<POOLER_HOST>:5432/postgres?sslmode=require
+spring.datasource.username=postgres.<PROJECT_REF>
+spring.datasource.password=<YOUR_DATABASE_PASSWORD>
 ```
 
-### Frontend
-Serve the `frontend` folder with any static server:
+### Step B: Build and Run
 ```bash
-cd frontend
-npx serve .
-# or use Live Server extension in VS Code
+# Clean and package the JAR
+./mvnw clean package -DskipTests
+
+# Run the packaged executable JAR
+java -jar target/jewellery-billing-0.0.1-SNAPSHOT.jar
 ```
-
-Open `http://localhost:3000` (or port shown) and ensure backend runs on `http://localhost:8080`.
-
-### Default Login
-- **Username:** admin
-- **Password:** admin123
+Open **`http://localhost:8080/`** in your browser.
 
 ---
 
-## 5. Environment Variables Reference
+## 🔒 5. User Registration & Security Warning
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | MySQL JDBC URL | `jdbc:mysql://localhost:3306/jewellery_billing` |
-| `DB_USERNAME` | Database username | `root` |
-| `DB_PASSWORD` | Database password | empty |
-| `JWT_SECRET` | JWT signing key | (dev default in properties) |
-| `JWT_EXPIRATION` | Token expiry (ms) | `86400000` (24h) |
-| `CORS_ORIGINS` | Allowed frontend origins | localhost URLs |
-| `PORT` | Server port | `8080` |
-
----
-
-## 6. Post-Deployment Checklist
-
-- [ ] Backend health check: `GET /api/health`
-- [ ] Login works from frontend
-- [ ] CORS configured correctly
-- [ ] Database tables auto-created (JPA `ddl-auto=update`)
-- [ ] Default admin user created
-- [ ] PDF download works
-- [ ] Change default admin password in production
+> [!WARNING]
+> **No Default Credentials**: To prevent security vulnerabilities in production, the default credentials (`admin` / `admin123`) have been disabled. 
+> 
+> * **Creating an Admin Account**: On your first launch (either locally or in production), navigate to the login screen and click **"Don't have an account? Create one"**. Enter your desired admin username and secure password, then click **Register**.
+> * **Subsequent Access**: For subsequent accesses, sign in using the credentials you registered or link your verified Google account.

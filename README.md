@@ -1,133 +1,119 @@
-# Jewellery Shop Billing & Inventory Management System
+# JewelBill — Jewellery Shop Billing & Inventory Management System
 
-A full-stack web application for jewellery shop billing, inventory management, and invoice generation built with **Java Spring Boot**, **MySQL**, and a responsive **Bootstrap 5** frontend.
+A unified, full-stack enterprise web application for jewellery shop billing, inventory management, and professional invoice generation. Built with **Java Spring Boot**, **PostgreSQL (Supabase)**, and a responsive, modern **Bootstrap 5** frontend served from a single origin.
 
-## Features
+---
 
-- **Authentication** — JWT-based admin login with Spring Security
-- **Dashboard** — Stats, recent invoices, and sales analytics chart
-- **Customer Management** — CRUD with search
-- **Product Management** — Gold/Silver products with rates
-- **Invoice/Billing** — Multi-item invoices with auto GST calculation
-- **Invoice History** — Search, date filter, view details
-- **PDF Generation** — Professional invoice PDF with shop details
-- **Settings** — Configure shop details for invoices
-- **Dark Mode** — Toggle light/dark theme
-- **Mobile Responsive** — Bootstrap 5 responsive design
+## 🚀 Key Features
 
-## Tech Stack
+* **Unified Single-Origin Architecture** — Frontend static files are packaged and served directly from the Spring Boot server (`http://localhost:8080/`), eliminating external hosting (like Vercel) and cross-origin (CORS) complexity.
+* **Modern Authentication Flow** — Secure login and register capability featuring:
+  * **Local Admin Registration**: Create custom admin accounts directly from the login page, secured with `BCrypt` hash encryption.
+  * **Google Sign-In integration**: Dual local and Google OAuth 2.0 single sign-on mechanism.
+  * **JWT Security**: Protected stateless `/api` routes validated via authorization headers containing JWT tokens.
+* **Dashboard & Analytics** — Rich analytics displaying real-time business statistics, recent invoices, and a sales analytics trend chart.
+* **Customer Management** — Full CRUD management system with responsive pagination and instant search.
+* **Product Management** — Gold and silver inventory control with dynamic rates per gram.
+* **Billing & Invoicing** — Interactive billing engine supporting multi-item orders, live metal rate estimation, making charges, and automated SGST/CGST calculation.
+* **Invoice History** — Complete audit trail of invoices with customer search, date range filtering, and inline details.
+* **PDF Printing engine** — Generates high-fidelity PDF invoices on the fly using **OpenPDF**, formatted with customized shop name, address, and GSTIN settings.
+* **Responsive Visuals** — Supports **Dark Mode** toggle and adapts to desktops, tablets, and mobile devices natively.
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Java 21, Spring Boot 4, Spring Security, Spring Data JPA |
-| Database | MySQL 8 |
-| Frontend | HTML5, CSS3, JavaScript, Bootstrap 5, Chart.js |
-| PDF | OpenPDF |
-| Auth | JWT (jjwt) |
-| Build | Maven |
-| Deployment | Vercel (frontend), Render (backend), Railway (MySQL) |
+---
 
-## Project Structure
+## 🛠️ Technology Stack
 
-```
+| Layer | Technologies |
+|---|---|
+| **Core Framework** | Java 21, Spring Boot 4.0, Spring Data JPA, Spring Security 7.0 |
+| **Database** | PostgreSQL 17 (Hosted securely on **Supabase**) |
+| **Frontend** | HTML5, CSS3, JavaScript (ES6+), Bootstrap 5, Bootstrap Icons, Chart.js |
+| **PDF Rendering** | OpenPDF |
+| **Auth Strategy** | Stateless JSON Web Tokens (jjwt), Google Identity Services (OAuth 2.0) |
+| **Build Automation** | Maven |
+| **Target Deployment** | Render, Railway, or AWS Elastic Beanstalk (Single Unified JAR) |
+
+---
+
+## 📂 Project Directory Structure
+
+```text
 jewellery-billing/
 ├── src/main/java/com/ankit/jewellery_billing/
-│   ├── config/          # Security, CORS, data initializer
-│   ├── controller/      # REST API controllers
-│   ├── dto/             # Request/Response DTOs
-│   ├── entity/          # JPA entities
-│   ├── exception/       # Global exception handling
-│   ├── repository/      # Spring Data JPA repositories
-│   ├── security/        # JWT filter, token provider
-│   ├── service/         # Business logic
-│   └── util/            # Mappers, calculators
+│   ├── config/          # Security configuration, CORS configurations, database initialization
+│   ├── controller/      # REST API endpoints (Auth, Invoices, Products, Customers, Settings)
+│   ├── dto/             # Data Transfer Objects (Register, login requests)
+│   ├── entity/          # JPA database models (User, Customer, Product, Invoice, ShopSettings)
+│   ├── exception/       # Global MVC exception handling mapping
+│   ├── repository/      # Spring Data JPA repository interfaces
+│   ├── security/        # JWT Authentication Filter & Google token verification utilities
+│   ├── service/         # Business services containing logical execution
+│   └── util/            # PDF generation, calculations
 ├── src/main/resources/
-│   └── application.properties
-├── frontend/
-│   ├── css/             # Stylesheets
-│   ├── js/              # API client, common utilities
-│   ├── pages/           # Dashboard, customers, products, etc.
-│   └── index.html       # Login page
-├── docs/
-│   ├── API_DOCUMENTATION.md
-│   ├── DATABASE_SCHEMA.sql
-│   └── ERD.md
-├── DEPLOYMENT_GUIDE.md
-├── pom.xml
-└── README.md
+│   ├── static/          # Bundled frontend static assets (HTML, CSS, JS, Pages)
+│   ├── application.properties       # Global project configuration properties
+│   └── application-local.properties # Local environment override secrets (gitignored)
+├── pom.xml              # Maven dependency manager configuration
+└── README.md            # Comprehensive project details
 ```
 
-## Quick Start
+---
 
-### Prerequisites
-- Java 21+
-- MySQL 8+
-- Node.js (optional, for serving frontend)
+## ⚙️ Quick Start (Local Run)
 
-### 1. Database Setup
+### 1. Prerequisites
+* **Java Development Kit (JDK) 21** or higher
+* **PostgreSQL database** (Local instance or [Supabase](https://supabase.com) remote connection)
+* **Google Cloud Console Credentials** (Optional, required for Google Sign-In)
+
+### 2. Configure Local Database and Secrets
+Create an `application-local.properties` file in `src/main/resources/` (if not already present) to override default configurations securely:
+
+```properties
+# Supabase PostgreSQL connection details (Session Pooler recommended for IPv4 compatibility)
+spring.datasource.url=jdbc:postgresql://<YOUR_SUPABASE_POOLER_HOST>:5432/postgres?sslmode=require
+spring.datasource.username=<YOUR_SUPABASE_USERNAME>
+spring.datasource.password=<YOUR_SUPABASE_PASSWORD>
+
+# Google OAuth Client Credentials
+google.client.id=<YOUR_GOOGLE_CLIENT_ID>
+```
+
+### 3. Build and Package
+Run the Maven build script to compile the application and bundle the static assets inside the executable JAR:
+
 ```bash
-mysql -u root -p < docs/DATABASE_SCHEMA.sql
+./mvnw clean package -DskipTests
 ```
 
-### 2. Run Backend
+### 4. Run the Application
+Launch the unified server locally:
+
 ```bash
-./mvnw spring-boot:run
+java -jar target/jewellery-billing-0.0.1-SNAPSHOT.jar
 ```
-Backend starts at `http://localhost:8080`
+The server will boot up on **`http://localhost:8080`**.
 
-### 3. Run Frontend
-```bash
-cd frontend && npx serve .
-```
-Open the URL shown (e.g. `http://localhost:3000`)
+### 5. Access and Registration
+Open `http://localhost:8080/` in your browser. 
+> [!IMPORTANT]
+> **No Default Credentials**: To ensure production security, there are no default hardcoded credentials (like `admin/admin123`). On the first run, click **"Don't have an account? Create one"** at the bottom of the login screen to register your admin user. Once registered, you will be automatically redirected to the dashboard.
 
-### 4. Login
-| Field | Value |
-|-------|-------|
-| Username | `admin` |
-| Password | `admin123` |
+---
 
-## API Overview
+## 📈 Invoice Calculations
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/login` | Admin login |
-| GET | `/api/dashboard/stats` | Dashboard statistics |
-| CRUD | `/api/customers` | Customer management |
-| CRUD | `/api/products` | Product management |
-| CRUD | `/api/invoices` | Invoice management |
-| GET | `/api/invoices/{id}/pdf` | Download invoice PDF |
-| GET/PUT | `/api/settings` | Shop settings |
+Invoices are dynamically calculated and stored using the following arithmetic rules:
 
-See [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) for full API reference.
+$$\text{Base Amount} = \text{Product Weight (g)} \times \text{Live Rate per Gram}$$
+$$\text{Subtotal} = \text{Base Amount} + \text{Making Charges}$$
+$$\text{GST Amount (CGST 1.5\% + SGST 1.5\%)} = \text{Subtotal} \times 3.0\%$$
+$$\text{Grand Total} = \text{Subtotal} + \text{GST Amount}$$
 
-## Invoice Calculation
+---
 
-```
-Base Amount    = Weight × Rate per Gram
-Subtotal       = Base Amount + Making Charges
-GST Amount     = Subtotal × GST% / 100
-Item Total     = Subtotal + GST Amount
-Grand Total    = Sum of all Item Totals
-```
+## 🔒 Security Practices
 
-## Documentation
-
-- [API Documentation](docs/API_DOCUMENTATION.md)
-- [Database Schema](docs/DATABASE_SCHEMA.sql)
-- [Entity Relationship Diagram](docs/ERD.md)
-- [Deployment Guide](DEPLOYMENT_GUIDE.md)
-
-## Deployment
-
-| Component | Platform |
-|-----------|----------|
-| Frontend | [Vercel](https://vercel.com) |
-| Backend | [Render](https://render.com) |
-| Database | [Railway MySQL](https://railway.app) |
-
-See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for step-by-step instructions.
-
-## License
-
-This project is built for educational/internship purposes.
+1. **Password Encryption**: All passwords registered are encrypted using the cryptographic hashing function `BCrypt` prior to database persistence.
+2. **Stateless API Authorization**: Endpoints residing under `/api/` (except public health check and auth requests) require a valid token passed inside the `Authorization: Bearer <TOKEN>` header.
+3. **Google Token Verification**: Google Sign-In tokens are verified cryptographically on the backend using Google's public key provider to guarantee security.
