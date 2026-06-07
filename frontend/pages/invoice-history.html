@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice History - JewelBill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app"></div>
+
+    <div class="modal fade" id="detailModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Invoice Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="detailContent"></div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-primary" id="downloadBtn"><i class="bi bi-download me-1"></i>Download PDF</button>
+                    <button class="btn btn-gold" id="printBtn"><i class="bi bi-printer me-1"></i>Print</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/common.js"></script>
+    <script>
+        if (!checkAuth()) throw new Error('Unauthorized');
+        document.getElementById('app').innerHTML = getLayoutHTML('invoice-history', 'Invoice History');
+        initDarkMode();
+
+        const detailModal = new bootstrap.Modal(document.getElementById('detailModal'));
+        let invoices = [], currentInvoiceId = null, currentInvoiceNumber = null;
+
+        document.getElementById('pageContent').innerHTML = `
+            <div class="card table-card">
+                <div class="card-header bg-transparent">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label small">Search by Invoice #</label>
+                            <input type="text" class="form-control" id="searchInput" placeholder="INV-...">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">From Date</label>
+                            <input type="date" class="form-control" id="startDate">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">To Date</label>
+                            <input type="date" class="form-control" id="endDate">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-gold w-100" onclick="filterInvoices()"><i class="bi bi-funnel"></i> Filter</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0"><div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead><tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Subtotal</th><th>GST</th><th>Total</th><th>Actions</th></tr></thead>
+                        <tbody id="invoiceTable"></tbody>
+                    </table>
+                </div></div>
+            </div>`;
+
+        async function loadInvoices(params = '') {
+            try {
+                const res = await Api.get(`/invoices${params}`);
+                invoices = res.data;
+                renderTable();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        function renderTable() {
+            document.getElementById('invoiceTable').innerHTML = invoices.length
+                ? invoices.map(inv => `<tr>
+                    <td><strong>${inv.invoiceNumber}</strong></td>
+                    <td>${inv.customer.name}</td>
+                    <td>${formatDate(inv.invoiceDate)}</td>
+                    <td>${formatCurrency(inv.subtotal)}</td>
+                    <td>${formatCurrency(inv.gstAmount)}</td>
+                    <td><strong>${formatCurrency(inv.grandTotal)}</strong></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info" onclick="viewInvoice(${inv.id})"><i class="bi bi-eye"></i></button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="downloadPdf(${inv.id}, '${inv.invoiceNumber.replace(/'/g, "\\'")}')"><i class="bi bi-download"></i></button>
+                    </td></tr>`).join('')
+                : '<tr><td colspan="7" class="text-center text-muted py-4">No invoices found</td></tr>';
+        }
+
+        function filterInvoices() {
+            const search = document.getElementById('searchInput').value;
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            let params = '?';
+            if (start && end) params += `startDate=${start}&endDate=${end}`;
+            else if (search) params += `search=${encodeURIComponent(search)}`;
+            else params = '';
+            loadInvoices(params);
+        }
+
+        async function viewInvoice(id) {
+            try {
+                const res = await Api.get(`/invoices/${id}`);
+                const inv = res.data;
+                currentInvoiceId = id;
+                currentInvoiceNumber = inv.invoiceNumber;
+                document.getElementById('detailContent').innerHTML = `
+                    <div class="row mb-3">
+                        <div class="col-6"><strong>Invoice:</strong> ${inv.invoiceNumber}</div>
+                        <div class="col-6 text-end"><strong>Date:</strong> ${formatDate(inv.invoiceDate)}</div>
+                    </div>
+                    <p><strong>Customer:</strong> ${inv.customer.name} | ${inv.customer.mobileNumber}</p>
+                    <p><strong>Address:</strong> ${inv.customer.address || '-'}</p>
+                    <table class="table table-sm table-bordered mt-3">
+                        <thead class="table-light"><tr><th>Item</th><th>Weight</th><th>Rate/g</th><th>Making</th><th>GST%</th><th>Total</th></tr></thead>
+                        <tbody>${inv.items.map(i => `<tr>
+                            <td>${i.itemName}</td><td>${i.weight}g</td><td>${formatCurrency(i.ratePerGram)}</td>
+                            <td>${formatCurrency(i.makingCharges)}</td><td>${i.gstPercentage}%</td><td>${formatCurrency(i.itemTotal)}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                    <div class="text-end">
+                        <p>Subtotal: ${formatCurrency(inv.subtotal)}</p>
+                        <p>GST: ${formatCurrency(inv.gstAmount)}</p>
+                        <h5>Grand Total: ${formatCurrency(inv.grandTotal)}</h5>
+                    </div>`;
+                detailModal.show();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        async function downloadPdf(id, invoiceNumber) {
+            try {
+                await Api.downloadPdf(id, `${invoiceNumber}.pdf`);
+                showToast('PDF downloaded');
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (currentInvoiceId && currentInvoiceNumber) {
+                downloadPdf(currentInvoiceId, currentInvoiceNumber);
+            }
+        });
+
+        document.getElementById('printBtn').addEventListener('click', async () => {
+            if (!currentInvoiceId || !currentInvoiceNumber) return;
+            try {
+                await Api.openPdfForPrint(currentInvoiceId, `${currentInvoiceNumber}.pdf`);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        let searchTimeout;
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                if (e.target.value) loadInvoices(`?search=${encodeURIComponent(e.target.value)}`);
+                else loadInvoices();
+            }, 300);
+        });
+
+        loadInvoices();
+
+        const urlId = new URLSearchParams(window.location.search).get('id');
+        if (urlId) viewInvoice(parseInt(urlId));
+    </script>
+</body>
+</html>

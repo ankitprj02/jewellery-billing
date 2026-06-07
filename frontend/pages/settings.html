@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - JewelBill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+    <style>
+        .signature-preview {
+            max-height: 80px;
+            max-width: 200px;
+            border: 1px dashed var(--bs-border-color);
+            border-radius: 8px;
+            padding: 8px;
+            background: var(--bs-body-bg);
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/common.js"></script>
+    <script>
+        if (!checkAuth()) throw new Error('Unauthorized');
+        document.getElementById('app').innerHTML = getLayoutHTML('settings', 'Shop Settings');
+        initDarkMode();
+
+        let signaturePreviewUrl = null;
+
+        document.getElementById('pageContent').innerHTML = `
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card table-card">
+                        <div class="card-header bg-transparent"><h5 class="mb-0">Shop Details (for Invoice PDF)</h5></div>
+                        <div class="card-body">
+                            <form id="settingsForm">
+                                <div class="mb-3">
+                                    <label class="form-label">Shop Name *</label>
+                                    <input type="text" class="form-control" id="shopName" required maxlength="150">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Address</label>
+                                    <textarea class="form-control" id="address" rows="2" maxlength="500"></textarea>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Phone</label>
+                                        <input type="text" class="form-control" id="phone" maxlength="20">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Email</label>
+                                        <input type="email" class="form-control" id="email" maxlength="100">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">GSTIN</label>
+                                    <input type="text" class="form-control" id="gstin" maxlength="20">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Signature Label</label>
+                                    <input type="text" class="form-control" id="signatureText" maxlength="200" placeholder="Authorized Signatory">
+                                    <div class="form-text">Text shown below the signature on invoices</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Signature Image</label>
+                                    <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                                        <img id="signaturePreview" class="signature-preview d-none" alt="Signature preview">
+                                        <span id="noSignature" class="text-muted small">No signature image uploaded</span>
+                                    </div>
+                                    <input type="file" class="form-control" id="signatureFile" accept="image/png,image/jpeg,image/jpg,image/webp">
+                                    <div class="form-text">PNG, JPG, or WEBP · Max 2MB · Appears on invoice PDF</div>
+                                    <div class="mt-2 d-flex gap-2">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" id="uploadSignatureBtn">
+                                            <i class="bi bi-upload me-1"></i>Upload Signature
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger btn-sm d-none" id="removeSignatureBtn">
+                                            <i class="bi bi-trash me-1"></i>Remove
+                                        </button>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-gold"><i class="bi bi-check-lg me-1"></i>Save Settings</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+        function updateSignaturePreview(hasImage, url = null) {
+            const preview = document.getElementById('signaturePreview');
+            const noSig = document.getElementById('noSignature');
+            const removeBtn = document.getElementById('removeSignatureBtn');
+
+            if (signaturePreviewUrl) {
+                URL.revokeObjectURL(signaturePreviewUrl);
+                signaturePreviewUrl = null;
+            }
+
+            if (hasImage && url) {
+                signaturePreviewUrl = url;
+                preview.src = url;
+                preview.classList.remove('d-none');
+                noSig.classList.add('d-none');
+                removeBtn.classList.remove('d-none');
+            } else {
+                preview.classList.add('d-none');
+                preview.removeAttribute('src');
+                noSig.classList.remove('d-none');
+                removeBtn.classList.add('d-none');
+            }
+        }
+
+        async function loadSignatureImage() {
+            try {
+                const url = await Api.getImageUrl('/settings/signature');
+                if (url) updateSignaturePreview(true, url);
+                else updateSignaturePreview(false);
+            } catch {
+                updateSignaturePreview(false);
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await Api.get('/settings');
+                const s = res.data;
+                document.getElementById('shopName').value = s.shopName || '';
+                document.getElementById('address').value = s.address || '';
+                document.getElementById('phone').value = s.phone || '';
+                document.getElementById('email').value = s.email || '';
+                document.getElementById('gstin').value = s.gstin || '';
+                document.getElementById('signatureText').value = s.signatureText || '';
+                if (s.hasSignatureImage) await loadSignatureImage();
+                else updateSignaturePreview(false);
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        document.getElementById('uploadSignatureBtn').addEventListener('click', async () => {
+            const fileInput = document.getElementById('signatureFile');
+            if (!fileInput.files.length) {
+                showToast('Please select an image file', 'error');
+                return;
+            }
+            const file = fileInput.files[0];
+            if (file.size > 2 * 1024 * 1024) {
+                showToast('Image must be smaller than 2MB', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                await Api.upload('/settings/signature', formData);
+                showToast('Signature image uploaded');
+                fileInput.value = '';
+                await loadSignatureImage();
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        document.getElementById('removeSignatureBtn').addEventListener('click', async () => {
+            if (!confirm('Remove signature image?')) return;
+            try {
+                await Api.delete('/settings/signature');
+                showToast('Signature image removed');
+                updateSignaturePreview(false);
+                document.getElementById('signatureFile').value = '';
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                await Api.put('/settings', {
+                    shopName: document.getElementById('shopName').value,
+                    address: document.getElementById('address').value,
+                    phone: document.getElementById('phone').value,
+                    email: document.getElementById('email').value,
+                    gstin: document.getElementById('gstin').value,
+                    signatureText: document.getElementById('signatureText').value
+                });
+                showToast('Settings saved successfully');
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        loadSettings();
+    </script>
+</body>
+</html>

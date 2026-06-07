@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Invoice - JewelBill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../js/config.js"></script>
+    <script src="../js/api.js"></script>
+    <script src="../js/common.js"></script>
+    <script>
+        if (!checkAuth()) throw new Error('Unauthorized');
+        document.getElementById('app').innerHTML = getLayoutHTML('create-invoice', 'Create Invoice');
+        initDarkMode();
+
+        let customers = [], products = [], itemCount = 0;
+
+        document.getElementById('pageContent').innerHTML = `
+            <form id="invoiceForm">
+                <div class="row g-4">
+                    <div class="col-lg-8">
+                        <div class="card table-card mb-4">
+                            <div class="card-header bg-transparent"><h5 class="mb-0">Invoice Details</h5></div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Customer *</label>
+                                        <select class="form-select" id="customerId" required></select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Invoice Date *</label>
+                                        <input type="date" class="form-control" id="invoiceDate" required>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card table-card">
+                            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Items</h5>
+                                <button type="button" class="btn btn-sm btn-gold" onclick="addItem()"><i class="bi bi-plus-lg"></i> Add Item</button>
+                            </div>
+                            <div class="card-body" id="itemsContainer"></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="totals-box sticky-top" style="top:1rem">
+                            <h5 class="mb-3">Summary</h5>
+                            <div class="d-flex justify-content-between mb-2"><span>Subtotal</span><strong id="subtotal">₹0.00</strong></div>
+                            <div class="d-flex justify-content-between mb-2"><span>GST Amount</span><strong id="gstAmount">₹0.00</strong></div>
+                            <hr>
+                            <div class="d-flex justify-content-between mb-3"><span class="fs-5">Grand Total</span><strong class="fs-5 text-warning" id="grandTotal">₹0.00</strong></div>
+                            <button type="submit" class="btn btn-gold w-100 py-2"><i class="bi bi-check-lg me-1"></i>Save Invoice</button>
+                        </div>
+                    </div>
+                </div>
+            </form>`;
+
+        document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+
+        async function init() {
+            try {
+                const [custRes, prodRes] = await Promise.all([Api.get('/customers'), Api.get('/products')]);
+                customers = custRes.data;
+                products = prodRes.data;
+                const select = document.getElementById('customerId');
+                select.innerHTML = '<option value="">Select customer</option>' +
+                    customers.map(c => `<option value="${c.id}">${c.name} (${c.mobileNumber})</option>`).join('');
+                addItem();
+            } catch (err) { showToast(err.message, 'error'); }
+        }
+
+        function calcItemTotal(weight, rate, making, gst) {
+            const base = weight * rate;
+            const sub = base + making;
+            const gstAmt = sub * gst / 100;
+            return { sub, gstAmt, total: sub + gstAmt };
+        }
+
+        function productLabel(p) {
+            return `${p.productName} — ${p.category} — ${formatCurrency(p.currentRate)}/g`;
+        }
+
+        function productOptionsHTML() {
+            const grouped = {};
+            products.forEach(p => {
+                if (!grouped[p.category]) grouped[p.category] = [];
+                grouped[p.category].push(p);
+            });
+            let html = '<option value="">Select product...</option><option value="custom">— Custom item (type manually) —</option>';
+            Object.keys(grouped).sort().forEach(category => {
+                html += `<optgroup label="${category}">`;
+                grouped[category].forEach(p => {
+                    html += `<option value="${p.id}">${productLabel(p)}</option>`;
+                });
+                html += '</optgroup>';
+            });
+            return html;
+        }
+
+        function onProductSelect(row) {
+            const select = row.querySelector('.item-product');
+            const nameInput = row.querySelector('.item-name');
+            const rateInput = row.querySelector('.item-rate');
+            const categoryBadge = row.querySelector('.item-category');
+
+            if (select.value === 'custom') {
+                nameInput.value = '';
+                nameInput.readOnly = false;
+                nameInput.placeholder = 'Enter custom item name';
+                nameInput.focus();
+                categoryBadge.textContent = '';
+                categoryBadge.className = 'item-category badge d-none';
+                return;
+            }
+
+            if (!select.value) {
+                nameInput.value = '';
+                nameInput.readOnly = true;
+                nameInput.placeholder = 'Select a product above';
+                categoryBadge.className = 'item-category badge d-none';
+                return;
+            }
+
+            const prod = products.find(p => p.id === parseInt(select.value));
+            if (!prod) return;
+
+            nameInput.value = `${prod.productName} (${prod.category})`;
+            nameInput.readOnly = true;
+            rateInput.value = prod.currentRate;
+            categoryBadge.textContent = prod.category;
+            categoryBadge.className = `item-category badge ${prod.category === 'Gold' ? 'bg-warning text-dark' : prod.category === 'Silver' ? 'bg-secondary' : 'bg-info'}`;
+            updateTotals();
+        }
+
+        function addItem() {
+            itemCount++;
+            const id = itemCount;
+            const container = document.getElementById('itemsContainer');
+            const div = document.createElement('div');
+            div.className = 'invoice-item-row';
+            div.id = `item-${id}`;
+            div.innerHTML = `
+                <div class="d-flex justify-content-between mb-2">
+                    <strong>Item #${id}</strong>
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeItem(${id})"><i class="bi bi-trash"></i></button>
+                </div>
+                <div class="row g-2">
+                    <div class="col-md-5">
+                        <label class="form-label small">Select Product *</label>
+                        <select class="form-select form-select-sm item-product" required>
+                            ${productOptionsHTML()}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Item Name *</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control item-name" required readonly placeholder="Select a product above">
+                            <span class="input-group-text item-category badge d-none p-1"></span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Weight (g) *</label>
+                        <input type="number" class="form-control form-control-sm item-weight" required min="0.001" step="0.001" value="1">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Rate/g *</label>
+                        <input type="number" class="form-control form-control-sm item-rate" required min="0.01" step="0.01" value="5000">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Making ₹</label>
+                        <input type="number" class="form-control form-control-sm item-making" min="0" step="0.01" value="0">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">GST % *</label>
+                        <input type="number" class="form-control form-control-sm item-gst" required min="0" step="0.01" value="3">
+                    </div>
+                </div>
+                <div class="text-end mt-2 small text-muted">Item Total: <strong class="item-total">₹0.00</strong></div>`;
+            container.appendChild(div);
+
+            div.querySelector('.item-product').addEventListener('change', () => onProductSelect(div));
+            div.querySelectorAll('input').forEach(inp => inp.addEventListener('input', updateTotals));
+            updateTotals();
+        }
+
+        function removeItem(id) {
+            const el = document.getElementById(`item-${id}`);
+            if (el) { el.remove(); updateTotals(); }
+        }
+
+        function updateTotals() {
+            let subtotal = 0, gstTotal = 0;
+            document.querySelectorAll('.invoice-item-row').forEach(row => {
+                const w = parseFloat(row.querySelector('.item-weight').value) || 0;
+                const r = parseFloat(row.querySelector('.item-rate').value) || 0;
+                const m = parseFloat(row.querySelector('.item-making').value) || 0;
+                const g = parseFloat(row.querySelector('.item-gst').value) || 0;
+                const calc = calcItemTotal(w, r, m, g);
+                subtotal += calc.sub;
+                gstTotal += calc.gstAmt;
+                row.querySelector('.item-total').textContent = formatCurrency(calc.total);
+            });
+            document.getElementById('subtotal').textContent = formatCurrency(subtotal);
+            document.getElementById('gstAmount').textContent = formatCurrency(gstTotal);
+            document.getElementById('grandTotal').textContent = formatCurrency(subtotal + gstTotal);
+        }
+
+        document.getElementById('invoiceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const items = [];
+            let valid = true;
+            document.querySelectorAll('.invoice-item-row').forEach(row => {
+                const productSelect = row.querySelector('.item-product');
+                const itemName = row.querySelector('.item-name').value.trim();
+                if (!productSelect.value || !itemName) {
+                    valid = false;
+                    return;
+                }
+                items.push({
+                    itemName,
+                    weight: parseFloat(row.querySelector('.item-weight').value),
+                    ratePerGram: parseFloat(row.querySelector('.item-rate').value),
+                    makingCharges: parseFloat(row.querySelector('.item-making').value) || 0,
+                    gstPercentage: parseFloat(row.querySelector('.item-gst').value)
+                });
+            });
+            if (!valid) { showToast('Please select a product for each item', 'error'); return; }
+            if (!items.length) { showToast('Add at least one item', 'error'); return; }
+
+            try {
+                const res = await Api.post('/invoices', {
+                    customerId: parseInt(document.getElementById('customerId').value),
+                    invoiceDate: document.getElementById('invoiceDate').value,
+                    items
+                });
+                showToast('Invoice created: ' + res.data.invoiceNumber);
+                setTimeout(() => window.location.href = `invoice-history.html?id=${res.data.id}`, 1500);
+            } catch (err) { showToast(err.message, 'error'); }
+        });
+
+        init();
+    </script>
+</body>
+</html>

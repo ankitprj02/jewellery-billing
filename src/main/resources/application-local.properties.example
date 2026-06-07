@@ -1,0 +1,6 @@
+# Copy this file to application-local.properties and set your MySQL password.
+# Command: cp src/main/resources/application-local.properties.example src/main/resources/application-local.properties
+
+spring.datasource.url=jdbc:mysql://localhost:3306/jewellery_billing?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+spring.datasource.username=root
+spring.datasource.password=YOUR_MYSQL_PASSWORD_HERE
